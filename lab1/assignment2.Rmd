@@ -1,0 +1,144 @@
+---
+title: "lab1_2"
+author: "Yanjie lyu (yanly639), Yi Yang (yiyan338)"
+date: "2025-09-16"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(rjson)
+library(plotly)
+library(akima)
+library(dplyr)
+library(stringr)
+```
+
+# Load Swedish map and data
+
+First, we download Swedish map and required data from the website. Using `reshape()`to process the raw data,in which different age groups are shown in columns.
+
+```{r echo=TRUE }
+#load and process data 
+data <- read.csv("income2023.csv",fileEncoding = "latin1")
+
+data_reshape <- reshape(data,
+                        idvar = "region",
+                        timevar = "age",
+                        direction="wide")
+colnames(data_reshape) <- c("region","young","adult","senior")
+
+#load the map
+
+library(rjson)
+json<-fromJSON(file="gadm41_SWE_1.json")
+data_reshape
+```
+
+# Including Plots
+
+Now we use `Ploty pipline` to show  the mean income distributions for each age group.
+
+```{r  echo=TRUE}
+agePlot <- data%>%
+  group_by(age)%>%
+  plot_ly(x=~age,
+          y=~X2023,
+          type = "violin",
+          box=list(visible=TRUE),
+          meanline=list(visible=TRUE))%>%
+  layout(
+    xaxis=list(title="Age Group"),
+    yaxis=list(title="Income Distribution")
+  )
+agePlot
+```
+
+The plot shows that young people (18–29 years) have the lowest mean income (374.92), likely due to limited work experience. Seniors have the highest mean income (670.53), but the difference compared to adults (606.92) is relatively small, possibly reflecting that many adults are already in peak earning years. Senior incomes vary widely, from 596.9 to 902.5, which may be influenced by differences in earnings across industries as well as variations in pension and retirement income. In contrast, young people’s incomes show the smallest variation, likely because entry-level salaries tend to be relatively uniform across industries.  
+
+# Surface plot showing the Dependence of Senior Incomes on Adult and Young Incomes
+
+We create a surface plot to show the dependence of Senior incomes on Adult and Young incomes in various counties.  
+
+```{r echo=TRUE}
+library(akima)
+attach(data_reshape)
+surface=interp(young,adult,senior,duplicate = "mean")
+detach(data_reshape)
+
+seniorIncomes <- plot_ly(
+         x=~surface$x,
+         y=~surface$y,
+         z=~surface$z,
+         type = 'surface')%>%
+  layout(
+ scene=list(xaxis=list(title="Young Incomes"),
+         yaxis=list(title="Adult Incomes"),
+         zaxis=list(title="Senior Incomes")
+        )
+  )       
+
+seniorIncomes
+```
+The surface plot shows an upward trending,which indicates a positive correlation between senior incomes and both adult and young incomes across counties.It mainly shows that counties with higher adult and young incomes also tend to have higher senior incomes.  
+
+A linear regression model could be used to model this dependence since the upward trend is smooth, monotonic and without complex surface.However it is still necessary to check the residuals to confirm the relationship is linear.  
+
+# Choropleth Map Comparison of Young and Adult Incomes Across Counties
+
+To visualize the spatial distribution, we first clean the `region` column in the dataset to match the corresponding field in the GeoJSON file.
+
+```{r echo=TRUE}
+library(dplyr)
+library(stringr)
+
+#clean the 'region' column so it matches the GeoJSON NAME_1
+data_reshape <- data_reshape%>%
+  mutate(
+    region_clean=str_remove(region,"^[0-9]+\\s+"),
+    region_clean=str_remove(region_clean,"\\s+county$"),
+    
+    region_clean=case_when(
+      region_clean == "Västra Götaland" ~ "VästraGötaland",
+      region_clean == "Örebro" ~ "Orebro",
+      TRUE~region_clean
+    )
+  )
+
+g=list(fitbounds="locations", visible=TRUE,projection = list(type = "mercator"))
+#young
+young<-plot_geo(data_reshape)%>%add_trace(type="choropleth",geojson=json, locations=~region_clean,
+                            z=~young, featureidkey="properties.NAME_1")%>%
+    add_trace(
+    type="scattergo",
+    lon=c(15.62157),
+    lat=c(58.41086),
+    mode="markers+text",
+    text="Link\u00F6ping",
+    textposition="right",
+    marker=list(size=8,color="red",cymbol="circle")
+  )%>%
+  layout(geo=g,
+         title=list(text="Young people incomes by county in Sweden",
+                    x=0.5,
+                    xanchor="center"))
+young
+#adult
+adult<-plot_geo(data_reshape)%>%add_trace(type="choropleth",geojson=json, locations=~region_clean,
+                                          z=~adult, featureidkey="properties.NAME_1")%>%
+  layout(geo=g,
+         title=list(text="Adult incomes by county in Sweden",
+                     x=0.5,
+                     xanchor="center"))
+adult
+```
+Young people’s incomes are higher in economically developed regions such as Stockholm and Västra Götaland, and lower in more remote areas. The income distribution for adults is similar, with the highest average income still found in Stockholm, but the income gap is smaller compared to that of young people.    
+Compared with the previous plots, the choropleth maps provide a clear visual representation of income differences across regions, distinctly highlighting areas with higher and lower incomes. They also reveal similar regional income patterns for both young and adult populations: economically developed cities tend to have higher incomes, while cities in the north generally have lower incomes.  
+
+
+# Add Linköping coordinates to the Young-income choropleth map
+
+The coordinates of Linköping were added as a red marker with a label in the young income map shown above.

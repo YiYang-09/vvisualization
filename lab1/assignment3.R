@@ -104,3 +104,4 @@ connectors <- c("am", "is", "are", "was", "were")
 make_phrase_net_vis(data, connectors, 0,  min_freq = 2)
 
 make_phrase_net_vis(data, connectors, 1,  min_freq = 2)
+

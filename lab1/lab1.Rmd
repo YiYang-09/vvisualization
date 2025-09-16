@@ -1,0 +1,823 @@
+---
+title: "Lab 1"
+output: html_document
+Author: Yanjie lyu (yanly639), Yi Yang (yiyan338)
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(plotly)
+library(tidyr)
+library(rjson)
+library(plotly)
+library(akima)
+library(stringr)
+
+
+data <- read.csv("tweets.csv")
+
+txt_f <- read.table("SENIC.txt", header = FALSE)  
+```
+
+# Assignment 1
+
+## Outliers finding functin
+
+```{r echo=TRUE}
+#' Function of getting outliers' indices 
+#'
+#' @param column A vector of data
+#'
+#' @returns Indices of outlying observations
+func1 <- function(column){
+  
+  quantiles <- quantile(column,probs=c(0.25,0.75))
+  greater <- quantiles[2] + 1.5*(quantiles[2] - quantiles[1])
+  less <- quantiles[1] - 1.5*(quantiles[2] - quantiles[1])
+  
+  ind1 <- which(column<less)
+  ind2 <- which(column>greater)
+  
+  ind <- c(ind1,ind2)
+  return(ind)
+}
+```
+
+## Density plot of Infection risk
+
+```{r echo=TRUE}
+infection_risk <- txt_f[,4]
+outliers <- func1(infection_risk)
+df <- data.frame(
+  infection_risk = infection_risk,
+  outlier = FALSE
+)
+df$outlier[outliers] <- TRUE   
+
+p3 <- ggplot(df, aes(x = infection_risk)) +
+  geom_density() +
+  geom_point(
+    data = subset(df, outlier),
+    aes(x = infection_risk, y = 0),
+    shape = 23, size = 3, color = "red", fill = "red"
+  ) +
+  labs(x = "Infection risk", y = "Density",
+       title = "Density of Infection Risk with Outliers (◇)") +
+  theme_minimal() 
+p3
+```
+
+Most hospitals are in the medium risk range, but there are still a few hospitals that show extreme high risk or low risk.  
+
+## Density plot of all quantitative variables
+
+```{r echo=TRUE}
+#' Function of density plot within a given variable
+#'
+#' @param df Dataset of SENIC
+#' @param column A vector of variable
+#' @param bw_adj chosen bw
+#'
+#' @returns Density plot with outliers
+
+var_name <- c("Length of Stay","Age","Infection Risk","Routine Culturing Ratio",
+              "Routine Chest X-ray Ratio","Number of Beds","Medical School Affiliation","Region","Average Daily Census",
+              "Number of Nurses","Available Facilities & Services")
+
+plot_func <- function(df, column, bw_adj = 1) {
+  values <-  df[,colnames(df)==column]
+  number_var <- which(colnames(df)==column)
+  outliers <- func1(values)
+  plot_df <- data.frame(
+    value = values,
+    outlier = rep(FALSE, length(values))
+  )
+  plot_df$outlier[outliers] <- TRUE
+  
+  p <- ggplot(plot_df, aes(x = value)) +
+    geom_density(fill = "lightblue", alpha = 0.5, adjust = bw_adj) +
+    geom_point(
+      data = subset(plot_df, outlier),
+      aes(x = value, y = 0),
+      shape = 23, size = 2.5, color = "red", fill = "red"
+    ) +
+    labs(title = paste("Density of", var_name[number_var-1])) +
+    theme_minimal()
+  
+  return(p)
+}
+```
+
+```{r echo=TRUE}
+all_vars <- paste0("V", c(2:7,10:12))
+plots <- lapply(all_vars, function(v) plot_func(txt_f, v))
+
+grid.arrange(grobs = plots, ncol = 2)
+```
+It can be seen that:  
+1.The outliers for most variables are located at the extreme right of the distribution, indicating the presence of some exceptionally high-value observations in the data, such as for `Number of Beds` and `Number of Nurses`.  
+2.Variables like `Density of Infection Risk` and `Density of Available Facilities & Services` have no obvious outliers, suggesting their data distributions are more compact without extreme high or low values.
+3.Variables such as `Age` and `Length of Stay` have a distribution shape that is close to a normal distribution, with data points distributed roughly symmetrically around the central value.  
+
+
+## Dependence of Infection risk on the Number of Nurses
+
+```{r echo=TRUE}
+ggplot(txt_f, aes(x = V11, y = V4, color = V7)) +
+  geom_point() +
+  scale_color_viridis_c(name = "Beds (V7)",direction = -1) +
+  labs(x = "Number of Nurses (V11)", y = "Infection Risk (V4, %)") +
+  theme_minimal()
+```
+
+The density plot in Step 4 only shows the individual distribution and outliers of each variable. But this scatter plot reveals an interactive relationship: the number of nurses and the number of beds are highly correlated. Also with the same number of nurses, hospitals of different sizes have different infection risks.
+
+###  Possible dangers of having such a color scale
+The number of beds and the number of nurses actually provide similar information, namely the size of the hospital, so the number of nurses and the number of beds are strongly correlated. But the color gradient here can mislead people about the impact of the number of beds on the risk of infection.
+
+Next, we Convert the graph from step 3 to Plotly with the ggplotly function.
+
+```{r}
+ggplotly(p3)
+```
+New Plotly functionalities:  
+1.Detailed information: Detailed information for data can be obtained by hovering the mouse over chart elements.  
+2.A toolbar in the top-right corner provides functions like zooming.  
+Analysis:
+The graph reveals extreme outliers at values of 1.3 and 7.8. These outliers, despite being few, notably expand the overall range of infection risk.  
+
+## Histogram of Infection risk
+
+```{r}
+library(dplyr)
+
+out_idx  <- func1(txt_f$V4)
+df7 <- txt_f %>%
+  dplyr::select(id = V1, infection_risk = V4) %>%
+  mutate(outlier = is.element(id, out_idx))
+
+plot7 <- df7 %>% plot_ly() %>% add_histogram(x=~infection_risk, nbinsx=50, name="infection risk") %>%
+  add_markers(data = df7 %>% filter(outlier),
+              x=~infection_risk,y=0,
+              name="outliers",
+              marker = list(symbol = "diamond",
+                            size = 10, color = "red"))
+plot7
+```
+
+## Shiny app
+To make your Shiny app interactive, the code for it can be seen in the `shiny.R` file.
+
+
+# Assignment 2
+
+## Load Swedish map and data
+
+First, we download Swedish map and required data from the website. Using `reshape()`to process the raw data,in which different age groups are shown in columns.
+
+```{r echo=TRUE }
+#load and process data 
+data <- read.csv("income2023.csv",fileEncoding = "latin1")
+
+data_reshape <- reshape(data,
+                        idvar = "region",
+                        timevar = "age",
+                        direction="wide")
+colnames(data_reshape) <- c("region","young","adult","senior")
+
+#load the map
+
+library(rjson)
+json<-fromJSON(file="gadm41_SWE_1.json")
+data_reshape
+```
+
+## Including Plots
+
+Now we use `Ploty pipline` to show  the mean income distributions for each age group.
+
+```{r  echo=TRUE}
+agePlot <- data%>%
+  group_by(age)%>%
+  plot_ly(x=~age,
+          y=~X2023,
+          type = "violin",
+          box=list(visible=TRUE),
+          meanline=list(visible=TRUE))%>%
+  layout(
+    xaxis=list(title="Age Group"),
+    yaxis=list(title="Income Distribution")
+  )
+agePlot
+```
+
+The plot shows that young people (18–29 years) have the lowest mean income (374.92), likely due to limited work experience. Seniors have the highest mean income (670.53), but the difference compared to adults (606.92) is relatively small, possibly reflecting that many adults are already in peak earning years. Senior incomes vary widely, from 596.9 to 902.5, which may be influenced by differences in earnings across industries as well as variations in pension and retirement income. In contrast, young people’s incomes show the smallest variation, likely because entry-level salaries tend to be relatively uniform across industries.  
+
+# Surface plot showing the Dependence of Senior Incomes on Adult and Young Incomes
+
+We create a surface plot to show the dependence of Senior incomes on Adult and Young incomes in various counties.  
+
+```{r echo=TRUE}
+library(akima)
+attach(data_reshape)
+surface=interp(young,adult,senior,duplicate = "mean")
+detach(data_reshape)
+
+seniorIncomes <- plot_ly(
+         x=~surface$x,
+         y=~surface$y,
+         z=~surface$z,
+         type = 'surface')%>%
+  layout(
+ scene=list(xaxis=list(title="Young Incomes"),
+         yaxis=list(title="Adult Incomes"),
+         zaxis=list(title="Senior Incomes")
+        )
+  )       
+
+seniorIncomes
+```
+The surface plot shows an upward trending,which indicates a positive correlation between senior incomes and both adult and young incomes across counties.It mainly shows that counties with higher adult and young incomes also tend to have higher senior incomes.  
+
+A linear regression model could be used to model this dependence since the upward trend is smooth, monotonic and without complex surface.However it is still necessary to check the residuals to confirm the relationship is linear.  
+
+## Choropleth Map Comparison of Young and Adult Incomes Across Counties
+
+To visualize the spatial distribution, we first clean the `region` column in the dataset to match the corresponding field in the GeoJSON file.
+
+```{r echo=TRUE}
+library(dplyr)
+library(stringr)
+
+#clean the 'region' column so it matches the GeoJSON NAME_1
+data_reshape <- data_reshape%>%
+  mutate(
+    region_clean=str_remove(region,"^[0-9]+\\s+"),
+    region_clean=str_remove(region_clean,"\\s+county$"),
+    
+    region_clean=case_when(
+      region_clean == "Västra Götaland" ~ "VästraGötaland",
+      region_clean == "Örebro" ~ "Orebro",
+      TRUE~region_clean
+    )
+  )
+
+g=list(fitbounds="locations", visible=TRUE,projection = list(type = "mercator"))
+#young
+young<-plot_geo(data_reshape)%>%add_trace(type="choropleth",geojson=json, locations=~region_clean,
+                            z=~young, featureidkey="properties.NAME_1")%>%
+    add_trace(
+    type="scattergo",
+    lon=c(15.62157),
+    lat=c(58.41086),
+    mode="markers+text",
+    text="Link\u00F6ping",
+    textposition="right",
+    marker=list(size=8,color="red",cymbol="circle")
+  )%>%
+  layout(geo=g,
+         title=list(text="Young people incomes by county in Sweden",
+                    x=0.5,
+                    xanchor="center"))
+young
+#adult
+adult<-plot_geo(data_reshape)%>%add_trace(type="choropleth",geojson=json, locations=~region_clean,
+                                          z=~adult, featureidkey="properties.NAME_1")%>%
+  layout(geo=g,
+         title=list(text="Adult incomes by county in Sweden",
+                     x=0.5,
+                     xanchor="center"))
+adult
+```
+Young people’s incomes are higher in economically developed regions such as Stockholm and Västra Götaland, and lower in more remote areas. The income distribution for adults is similar, with the highest average income still found in Stockholm, but the income gap is smaller compared to that of young people.    
+Compared with the previous plots, the choropleth maps provide a clear visual representation of income differences across regions, distinctly highlighting areas with higher and lower incomes. They also reveal similar regional income patterns for both young and adult populations: economically developed cities tend to have higher incomes, while cities in the north generally have lower incomes.  
+
+
+## Add Linköping coordinates to the Young-income choropleth map
+
+The coordinates of Linköping were added as a red marker with a label in the young income map shown above.
+
+# Assignment 3
+
+```{r include=FALSE}
+library(dplyr)
+library(tidytext)
+library(wordcloud)
+library(textdata)
+library(ggraph)
+library(igraph)
+library(tidyr)
+library(stringr)
+library(RColorBrewer)
+library(visNetwork)
+
+data <- read.csv("tweets.csv")
+```
+
+```{r echo=TRUE}
+
+data("stop_words")
+
+data_clean <- data %>%
+  mutate(label = ifelse(label == 0, "Fake", "True")) %>%
+  unnest_tokens(word, tweet) %>%
+  anti_join(stop_words, by = "word")
+
+word_counts <- data_clean %>%
+  count(label, word, sort = TRUE)
+
+par(mfrow=c(1,2))
+
+fake_words <- subset(word_counts, label == "Fake")
+wordcloud(words = fake_words$word, 
+          freq = fake_words$n,
+          max.words = 70)
+title("Fake News Word Cloud")
+
+true_words <- subset(word_counts, label == "True")
+wordcloud(words = true_words$word, 
+          freq = true_words$n,
+          max.words = 80)
+title("Ture News Word Cloud")
+```
+
+*Fake news*: Vaccine and Covid are the two most mentioned words.
+
+*True news*: Covid is the most mentioned word, followed by trump and people.
+
+# Sentiment analysis
+
+```{r echo=TRUE}
+afinn <- get_sentiments("afinn")
+
+tweets_sent <- data %>%
+  mutate(chunk = rep(1:ceiling(n()/5), each = 5, length.out = n())) %>%  
+  unnest_tokens(word, tweet) %>%
+  inner_join(afinn, by = "word") %>%
+  group_by(label, chunk) %>%
+  summarise(sentiment = sum(value), .groups = "drop") 
+
+
+ggplot(tweets_sent, aes(x = chunk, y = sentiment, fill = factor(label))) +
+  geom_col(position = "dodge") +
+  labs(title = "Sentiment per Chunk (Fake vs Real News)",
+       x = "Chunk Index (every 5 lines)",
+       y = "Average Sentiment",
+       fill = "News Type") +
+  theme_minimal()
+```
+
+*Common ground*: The sum of sentiments for both True and Fake news is generally negative.
+
+*Difference*: 
+
+1. True news has a wider fluctuation range, with some chunks approaching zero or even having a small amount of positive accumulation. This shows that true news still contains neutral or positive descriptions among negative reports.
+
+2. Fake news is generally more stable and concentrated in negative values, with no significant positive fluctuations. This indicates that fake news is more homogenous and primarily uses negative emotions to attract attention.
+
+
+# Phrase nets
+
+```{r echo=TRUE}
+
+
+make_phrase_net_vis <- function(data, connectors, news_type, min_freq = 1) {
+  
+  df <-data[data$label==news_type,]
+  
+  tidy_frame <- df %>%
+    unnest_tokens(trigram, tweet, token = "ngrams", n = 3) %>%
+    separate(trigram, into = c("word1", "word2", "word3"), sep = " ") %>%
+    filter(word2 %in% connectors)
+  
+  tidy_frame <- tidy_frame %>%
+    filter(!word1 %in% stop_words$word)%>%
+    filter(!word3 %in% stop_words$word)
+
+  
+  edges <- tidy_frame %>%
+    count(word1, word3, name = "width", sort = TRUE) %>%
+    filter(width >= min_freq) %>%
+    transmute(from = word1, to = word3, width, arrows = "to")
+
+  right_words <- edges %>% count(word = to,   wt = width)
+  left_words  <- edges %>% count(word = from, wt = width)
+  
+  nodes <- full_join(left_words, right_words, by = "word") %>%
+    mutate(n.x = coalesce(n.x, 0),        
+           n.y = coalesce(n.y, 0),        
+           n.total = n.x + n.y,
+           id = word, label = word, value = n.total) %>%
+    filter(n.total >= 3)
+  
+  rnk <- rank(nodes$n.total, ties.method = "min", na.last = "keep")
+  denom <- max(rnk, na.rm = TRUE); if (!is.finite(denom)) denom <- 1
+  grp <- ifelse(is.na(rnk), 1L, pmax(1L, ceiling(rnk / denom * 9)))
+  
+  nodes$color <- brewer.pal(9, "Blues")[grp]
+  nodes$`font.size` <- 25L
+  
+  nodes <- nodes %>% filter(id %in% edges$from | id %in% edges$to)
+  
+  visNetwork(nodes, edges) 
+}
+
+connectors <- c("am", "is", "are", "was", "were")
+
+```
+
+```{r echo=TRUE}
+make_phrase_net_vis(data, connectors, 0,  min_freq = 1)
+```
+
+
+**Fake news**:
+
+The content of fake news mainly focuses on the topic of COVID. Fake news tends to highlight doubts and denials (masks are ineffective, immunity is reached, the CDC is lying), often in the form of short, emotional accusations.
+
+
+```{r}
+make_phrase_net_vis(data, connectors, 1,  min_freq = 1)
+```
+
+
+**True news**: True news has more core nodes and is more complex, encompassing more topics beyond COVID. The nodes are highly connected, with many loops or intertwining patterns. This suggests that true news texts tend to be more comprehensive narratives.
+
+**Summary**: Fake news is more negative and fragmented, while true news is broader and covers more comprehensive topics.
+
+
+
+
+
+
+# Appendix
+## Assignment 1
+
+```{r,  echo=TRUE, eval=FALSE}
+txt_f <- read.table("SENIC.txt", header = FALSE)  
+
+func1 <- function(column){
+  
+  quantiles <- quantile(column,probs=c(0.25,0.75))
+  greater <- quantiles[2] + 1.5*(quantiles[2] - quantiles[1])
+  less <- quantiles[1] - 1.5*(quantiles[2] - quantiles[1])
+  
+  ind1 <- which(column<less)
+  ind2 <- which(column>greater)
+  
+  ind <- c(ind1,ind2)
+  return(ind)
+}
+
+#step3
+library(ggplot2)
+
+infection_risk <- txt_f[,4]
+outliers <- func1(infection_risk)
+df <- data.frame(
+  infection_risk = infection_risk,
+  outlier = FALSE
+)
+df$outlier[outliers] <- TRUE   
+
+p3 <- ggplot(df, aes(x = infection_risk)) +
+  geom_density() +
+  geom_point(
+    data = subset(df, outlier),
+    aes(x = infection_risk, y = 0),
+    shape = 23, size = 3, color = "red", fill = "red"
+  ) +
+  labs(x = "Infection risk", y = "Density",
+       title = "Density of Infection Risk with Outliers (◇)") +
+  theme_minimal()
+p3
+
+
+#step4
+library(gridExtra)
+
+plot_func <- function(df, column, bw_adj = 1) {
+  values <-  df[,colnames(df)==column]
+  outliers <- func1(values)
+  plot_df <- data.frame(
+    value = values,
+    outlier = rep(FALSE, length(values))
+  )
+  plot_df$outlier[outliers] <- TRUE
+  
+  p <- ggplot(plot_df, aes(x = value)) +
+    geom_density(fill = "lightblue", alpha = 0.5, adjust = bw_adj) +
+    geom_point(
+      data = subset(plot_df, outlier),
+      aes(x = value, y = 0),
+      shape = 23, size = 2.5, color = "red", fill = "red"
+    ) +
+    labs(title = paste("Density of", column)) +
+    theme_minimal()
+  
+  return(p)
+}
+
+
+all_vars <- paste0("V", 2:12)
+plots <- lapply(all_vars, function(v) plot_func(txt_f, v))
+
+grid.arrange(grobs = plots, ncol = 3)
+#
+
+
+#step5
+ggplot(txt_f, aes(x = V11, y = V4, color = V7)) +
+  geom_point() +
+  scale_color_viridis_c(name = "Beds (V7)",direction = -1) +
+  labs(x = "Number of Nurses (V11)", y = "Infection Risk (V4, %)") +
+  theme_minimal()
+
+
+
+#step6
+library(plotly)
+ggplotly(p3)
+
+
+#step7
+library(dplyr)
+out_idx  <- func1(txt_f$V4)
+df7 <- txt_f %>%
+  select(id = V1, infection_risk = V4) %>%
+  mutate(outlier = is.element(id, out_idx))
+
+plot7 <- df7 %>% plot_ly() %>% add_histogram(x=~infection_risk, nbinsx=50, name="infection risk") %>%
+  add_markers(data = df7 %>% filter(outlier),
+              x=~infection_risk,y=0,
+              name="outliers",
+              marker = list(symbol = "diamond",
+                            size = 10, color = "red"))
+plot7
+#step8
+library(shiny)
+
+ui <- fluidPage(
+  titlePanel("Densities"),
+  sidebarLayout(
+    sidebarPanel(
+      checkboxGroupInput(
+        "vars", "choose variables（V2–V12）：",
+        choices = paste0("V", 2:12),
+        selected = c("V4", "V2", "V11")
+      ),
+      sliderInput(
+        "bw_adj", "bw：",
+        min = 0.3, max = 3, value = 1, step = 0.1
+      )
+    ),
+    mainPanel(
+      plotOutput("panel", height = "720px")
+    )
+  )
+)
+
+server <- function(input, output, session){
+  
+  output$panel <- renderPlot({
+    req(input$vars)
+    
+    plots <- lapply(
+      input$vars,
+      function(v) plot_func(txt_f, v, bw_adj = input$bw_adj)
+    )
+    
+    do.call(grid.arrange, c(plots, ncol = input$ncol))
+  })
+}
+shinyApp(ui, server)
+```
+
+# Assignment 2
+
+```{r echo=TRUE, eval=FALSE}
+#1
+library(tidyr)
+#load and process data 
+data <- read.csv("income2023.csv",fileEncoding = "latin1")
+
+data_reshape <- reshape(data,
+                        idvar = "region",
+                        timevar = "age",
+                        direction="wide")
+colnames(data_reshape) <- c("region","young","adult","senior")
+
+#load the map
+
+library(rjson)
+json<-fromJSON(file="gadm41_SWE_1.json")
+
+#2
+library(plotly)
+
+
+
+agePlot <- data%>%
+  group_by(age)%>%
+  plot_ly(x=~age,
+          y=~X2023,
+          type = "violin",
+          box=list(visible=TRUE),
+          meanline=list(visible=TRUE))%>%
+  layout(
+    xaxis=list(title="Age Group"),
+    yaxis=list(title="Income Distribution")
+  )
+agePlot
+
+#3Surface plot
+library(akima)
+attach(data_reshape)
+surface=interp(young,adult,senior,duplicate = "mean")
+detach(data_reshape)
+
+seniorIncomes <- plot_ly(
+         x=~surface$x,
+         y=~surface$y,
+         z=~surface$z,
+         type = 'surface')%>%
+  layout(
+ scene=list(xaxis=list(title="Young Incomes"),
+         yaxis=list(title="Adult Incomes"),
+         zaxis=list(title="Senior Incomes")
+        )
+  )       
+
+seniorIncomes
+
+
+
+
+
+#4&5
+library(dplyr)
+library(stringr)
+
+#clean the 'region' column so it matches the GeoJSON NAME_1
+data_reshape <- data_reshape%>%
+  mutate(
+    region_clean=str_remove(region,"^[0-9]+\\s+"),
+    region_clean=str_remove(region_clean,"\\s+county$"),
+    
+    region_clean=case_when(
+      region_clean == "Västra Götaland" ~ "VästraGötaland",
+      region_clean == "Örebro" ~ "Orebro",
+      TRUE~region_clean
+    )
+  )
+
+g=list(fitbounds="locations", visible=TRUE,projection = list(type = "mercator"))
+#young
+young<-plot_geo(data_reshape)%>%add_trace(type="choropleth",geojson=json, locations=~region_clean,
+                            z=~young, featureidkey="properties.NAME_1")%>%
+  add_trace(
+    type="scattergo",
+    lon=c(15.62157),
+    lat=c(58.41086),
+    mode="markers+text",
+    text="Link\u00F6ping",
+    textposition="right",
+    marker=list(size=8,color="red",cymbol="circle")
+  )%>%
+  layout(geo=g,
+         title=list(text="Young people incomes by county in Sweden",
+                    x=0.5,
+                    xanchor="center"))
+young
+#adult
+adult<-plot_geo(data_reshape)%>%add_trace(type="choropleth",geojson=json, locations=~region_clean,
+                                          z=~adult, featureidkey="properties.NAME_1")%>%
+  layout(geo=g,
+         title=list(text="Adult incomes by county in Sweden",
+                     x=0.5,
+                     xanchor="center"))
+adult
+
+
+
+```
+
+
+# Assignment 3
+```{r echo=TRUE, eval=FALSE}
+library(dplyr)
+library(tidytext)
+library(wordcloud)
+library(textdata)
+library(ggraph)
+library(igraph)
+library(tidyr)
+library(stringr)
+library(RColorBrewer)
+library(visNetwork)
+
+data <- read.csv("tweets.csv")
+
+data("stop_words")
+
+data_clean <- data %>%
+  mutate(label = ifelse(label == 0, "Fake", "True")) %>%
+  unnest_tokens(word, tweet) %>%
+  anti_join(stop_words, by = "word")
+
+word_counts <- data_clean %>%
+  count(label, word, sort = TRUE)
+
+par(mfrow=c(1,2))
+
+fake_words <- subset(word_counts, label == "Fake")
+wordcloud(words = fake_words$word, 
+          freq = fake_words$n,
+          max.words = 100)
+title("Fake News Word Cloud")
+
+true_words <- subset(word_counts, label == "True")
+wordcloud(words = true_words$word, 
+          freq = true_words$n,
+          max.words = 100)
+title("Ture News Word Cloud")
+
+#step2
+afinn <- get_sentiments("afinn")
+
+tweets_sent <- data %>%
+  mutate(chunk = rep(1:ceiling(n()/5), each = 5, length.out = n())) %>%  
+  unnest_tokens(word, tweet) %>%
+  inner_join(afinn, by = "word") %>%
+  group_by(label, chunk) %>%
+  summarise(sentiment = mean(value), .groups = "drop") 
+
+
+ggplot(tweets_sent, aes(x = chunk, y = sentiment, fill = factor(label))) +
+  geom_col(position = "dodge") +
+  labs(title = "Sentiment per Chunk (Fake vs Real News)",
+       x = "Chunk Index (every 5 lines)",
+       y = "Average Sentiment",
+       fill = "News Type") +
+  theme_minimal()
+
+
+#step3
+
+
+make_phrase_net_vis <- function(data, connectors, news_type, min_freq = 1) {
+  
+  df <-data[data$label==news_type,]
+  
+  tidy_frame <- df %>%
+    unnest_tokens(trigram, tweet, token = "ngrams", n = 3) %>%
+    separate(trigram, into = c("word1", "word2", "word3"), sep = " ") %>%
+    filter(word2 %in% connectors)
+  
+  tidy_frame <- tidy_frame %>%
+    filter(!word1 %in% stop_words$word)%>%
+    filter(!word3 %in% stop_words$word)
+  
+  
+  edges <- tidy_frame %>%
+    count(word1, word3, name = "width", sort = TRUE) %>%
+    filter(width >= min_freq) %>%
+    transmute(from = word1, to = word3, width, arrows = "to")
+  
+  right_words <- edges %>% count(word = to,   wt = width)
+  left_words  <- edges %>% count(word = from, wt = width)
+  
+  nodes <- full_join(left_words, right_words, by = "word") %>%
+    mutate(n.x = coalesce(n.x, 0),        
+           n.y = coalesce(n.y, 0),        
+           n.total = n.x + n.y,
+           id = word, label = word, value = n.total) %>%
+    filter(n.total >= 3)
+  
+  rnk <- rank(nodes$n.total, ties.method = "min", na.last = "keep")
+  denom <- max(rnk, na.rm = TRUE); if (!is.finite(denom)) denom <- 1
+  grp <- ifelse(is.na(rnk), 1L, pmax(1L, ceiling(rnk / denom * 9)))
+  
+  nodes$color <- brewer.pal(9, "Blues")[grp]
+  nodes$`font.size` <- 25L
+  
+  nodes <- nodes %>% filter(id %in% edges$from | id %in% edges$to)
+  
+  visNetwork(nodes, edges) 
+}
+
+connectors <- c("am", "is", "are", "was", "were")
+
+make_phrase_net_vis(data, connectors, 0,  min_freq = 2)
+
+make_phrase_net_vis(data, connectors, 1,  min_freq = 2)
+```
+
+
+
