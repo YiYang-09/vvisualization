@@ -1,0 +1,256 @@
+---
+title: "assignment1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(plotly)
+
+txt_f <- read.table("SENIC.txt", header = FALSE)  
+```
+
+```{r echo=TRUE}
+#' Function of getting outliers' indices 
+#'
+#' @param column A vector of data
+#'
+#' @returns Indices of outlying observations
+func1 <- function(column){
+  
+  quantiles <- quantile(column,probs=c(0.25,0.75))
+  greater <- quantiles[2] + 1.5*(quantiles[2] - quantiles[1])
+  less <- quantiles[1] - 1.5*(quantiles[2] - quantiles[1])
+  
+  ind1 <- which(column<less)
+  ind2 <- which(column>greater)
+  
+  ind <- c(ind1,ind2)
+  return(ind)
+}
+```
+
+# Density plot of Infection risk
+
+```{r echo=TRUE}
+infection_risk <- txt_f[,4]
+outliers <- func1(infection_risk)
+df <- data.frame(
+  infection_risk = infection_risk,
+  outlier = FALSE
+)
+df$outlier[outliers] <- TRUE   
+
+p3 <- ggplot(df, aes(x = infection_risk)) +
+  geom_density() +
+  geom_point(
+    data = subset(df, outlier),
+    aes(x = infection_risk, y = 0),
+    shape = 23, size = 3, color = "red", fill = "red"
+  ) +
+  labs(x = "Infection risk", y = "Density",
+       title = "Density of Infection Risk with Outliers (◇)") +
+  theme_minimal() 
+p3
+```
+
+Most hospitals are in the medium risk range, but there are still a few
+hospitals that show extreme high risk or low risk.
+
+# Density plot of all quantitative variables
+
+```{r echo=TRUE}
+#' Function of density plot within a given variable
+#'
+#' @param df Dataset of SENIC
+#' @param column A vector of variable
+#' @param bw_adj chosen bw
+#'
+#' @returns Density plot with outliers
+
+var_name <- c("Length of Stay","Age","Infection Risk","Routine Culturing Ratio",
+              "Routine Chest X-ray Ratio","Number of Beds","Medical School Affiliation","Region","Average Daily Census",
+              "Number of Nurses","Available Facilities & Services")
+
+plot_func <- function(df, column, bw_adj = 1) {
+  values <-  df[,colnames(df)==column]
+  number_var <- which(colnames(df)==column)
+  outliers <- func1(values)
+  plot_df <- data.frame(
+    value = values,
+    outlier = rep(FALSE, length(values))
+  )
+  plot_df$outlier[outliers] <- TRUE
+  
+  p <- ggplot(plot_df, aes(x = value)) +
+    geom_density(fill = "lightblue", alpha = 0.5, adjust = bw_adj) +
+    geom_point(
+      data = subset(plot_df, outlier),
+      aes(x = value, y = 0),
+      shape = 23, size = 2.5, color = "red", fill = "red"
+    ) +
+    labs(title = paste("Density of", var_name[number_var-1])) +
+    theme_minimal()
+  
+  return(p)
+}
+```
+
+```{r echo=TRUE}
+all_vars <- paste0("V", c(2:7,10:12))
+plots <- lapply(all_vars, function(v) plot_func(txt_f, v))
+
+grid.arrange(grobs = plots, ncol = 2)
+```
+
+
+
+# Dependence of Infection risk on the Number of Nurses
+
+```{r echo=TRUE}
+ggplot(txt_f, aes(x = V11, y = V4, color = V7)) +
+  geom_point() +
+  scale_color_viridis_c(name = "Beds (V7)",direction = -1) +
+  labs(x = "Number of Nurses (V11)", y = "Infection Risk (V4, %)") +
+  theme_minimal()
+```
+
+The density plot in Step 4 only shows the individual distribution and outliers of each variable. But this scatter plot reveals an interactive relationship: the number of nurses and the number of beds are highly correlated. Also with the same number of nurses, hospitals of different sizes have different infection risks.
+
+##  possible dangers of having such a color scale
+The number of beds and the number of nurses actually provide similar information, namely the size of the hospital, so the number of nurses and the number of beds are strongly correlated. But the color gradient here can mislead people about the impact of the number of beds on the risk of infection.
+
+Next, we Convert the graph from step 3 to Plotly with the ggplotly function.
+
+```{r}
+ggplotly(p3)
+```
+
+# Histogram of Infection risk
+
+```{r}
+out_idx  <- func1(txt_f$V4)
+df7 <- txt_f %>%
+  select(id = V1, infection_risk = V4) %>%
+  mutate(outlier = is.element(id, out_idx))
+
+plot7 <- df7 %>% plot_ly() %>% add_histogram(x=~infection_risk, nbinsx=50, name="infection risk") %>%
+  add_markers(data = df7 %>% filter(outlier),
+              x=~infection_risk,y=0,
+              name="outliers",
+              marker = list(symbol = "diamond",
+                            size = 10, color = "red"))
+plot7
+```
+
+# Appendix
+
+```{r,  echo=TRUE, eval=FALSE}
+txt_f <- read.table("SENIC.txt", header = FALSE)  
+
+func1 <- function(column){
+  
+  quantiles <- quantile(column,probs=c(0.25,0.75))
+  greater <- quantiles[2] + 1.5*(quantiles[2] - quantiles[1])
+  less <- quantiles[1] - 1.5*(quantiles[2] - quantiles[1])
+  
+  ind1 <- which(column<less)
+  ind2 <- which(column>greater)
+  
+  ind <- c(ind1,ind2)
+  return(ind)
+}
+
+#step3
+library(ggplot2)
+
+infection_risk <- txt_f[,4]
+outliers <- func1(infection_risk)
+df <- data.frame(
+  infection_risk = infection_risk,
+  outlier = FALSE
+)
+df$outlier[outliers] <- TRUE   
+
+p3 <- ggplot(df, aes(x = infection_risk)) +
+  geom_density() +
+  geom_point(
+    data = subset(df, outlier),
+    aes(x = infection_risk, y = 0),
+    shape = 23, size = 3, color = "red", fill = "red"
+  ) +
+  labs(x = "Infection risk", y = "Density",
+       title = "Density of Infection Risk with Outliers (◇)") +
+  theme_minimal()
+p3
+
+
+#step4
+library(gridExtra)
+
+plot_func <- function(df, column, bw_adj = 1) {
+  values <-  df[,colnames(df)==column]
+  outliers <- func1(values)
+  plot_df <- data.frame(
+    value = values,
+    outlier = rep(FALSE, length(values))
+  )
+  plot_df$outlier[outliers] <- TRUE
+  
+  p <- ggplot(plot_df, aes(x = value)) +
+    geom_density(fill = "lightblue", alpha = 0.5, adjust = bw_adj) +
+    geom_point(
+      data = subset(plot_df, outlier),
+      aes(x = value, y = 0),
+      shape = 23, size = 2.5, color = "red", fill = "red"
+    ) +
+    labs(title = paste("Density of", column)) +
+    theme_minimal()
+  
+  return(p)
+}
+
+
+all_vars <- paste0("V", 2:12)
+plots <- lapply(all_vars, function(v) plot_func(txt_f, v))
+
+grid.arrange(grobs = plots, ncol = 3)
+#
+
+
+#step5
+ggplot(txt_f, aes(x = V11, y = V4, color = V7)) +
+  geom_point() +
+  scale_color_viridis_c(name = "Beds (V7)",direction = -1) +
+  labs(x = "Number of Nurses (V11)", y = "Infection Risk (V4, %)") +
+  theme_minimal()
+
+
+
+#step6
+library(plotly)
+ggplotly(p3)
+
+
+#step7
+library(dplyr)
+out_idx  <- func1(txt_f$V4)
+df7 <- txt_f %>%
+  select(id = V1, infection_risk = V4) %>%
+  mutate(outlier = is.element(id, out_idx))
+
+plot7 <- df7 %>% plot_ly() %>% add_histogram(x=~infection_risk, nbinsx=50, name="infection risk") %>%
+  add_markers(data = df7 %>% filter(outlier),
+              x=~infection_risk,y=0,
+              name="outliers",
+              marker = list(symbol = "diamond",
+                            size = 10, color = "red"))
+plot7
+```
+
