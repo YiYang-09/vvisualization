@@ -172,7 +172,7 @@ plot7
 ```
 
 ## Shiny app
-To make your Shiny app interactive, the code for it can be seen in the `shiny.R` file.
+To make the Shiny app interactive, the code for it can be seen in the `shiny.R` file.
 
 
 # Assignment 2
@@ -320,36 +320,38 @@ library(visNetwork)
 data <- read.csv("tweets.csv")
 ```
 
+
 ```{r echo=TRUE}
 
 data("stop_words")
 
 data_clean <- data %>%
-  mutate(label = ifelse(label == 0, "Fake", "True")) %>%
   unnest_tokens(word, tweet) %>%
   anti_join(stop_words, by = "word")
 
 word_counts <- data_clean %>%
   count(label, word, sort = TRUE)
 
-par(mfrow=c(1,2))
+par(mar=c(0,0,2,0))
 
-fake_words <- subset(word_counts, label == "Fake")
+fake_words <- subset(word_counts, label == 0)
 wordcloud(words = fake_words$word, 
           freq = fake_words$n,
-          max.words = 70)
+          max.words = 100)
 title("Fake News Word Cloud")
 
-true_words <- subset(word_counts, label == "True")
+par(mar=c(0,0,2,0))
+true_words <- subset(word_counts, label == 1)
 wordcloud(words = true_words$word, 
           freq = true_words$n,
-          max.words = 80)
+          max.words = 100)
 title("Ture News Word Cloud")
 ```
 
+
 *Fake news*: Vaccine and Covid are the two most mentioned words.
 
-*True news*: Covid is the most mentioned word, followed by trump and people.
+*True news*: Covid is the most mentioned word, followed by trump,pandemic and people.
 
 # Sentiment analysis
 
@@ -502,8 +504,13 @@ p3
 #step4
 library(gridExtra)
 
+var_name <- c("Length of Stay","Age","Infection Risk","Routine Culturing Ratio",
+              "Routine Chest X-ray Ratio","Number of Beds","Medical School Affiliation","Region","Average Daily Census",
+              "Number of Nurses","Available Facilities & Services")
+
 plot_func <- function(df, column, bw_adj = 1) {
   values <-  df[,colnames(df)==column]
+  number_var <- which(colnames(df)==column)
   outliers <- func1(values)
   plot_df <- data.frame(
     value = values,
@@ -518,17 +525,17 @@ plot_func <- function(df, column, bw_adj = 1) {
       aes(x = value, y = 0),
       shape = 23, size = 2.5, color = "red", fill = "red"
     ) +
-    labs(title = paste("Density of", column)) +
+    labs(title = paste("Density of", var_name[number_var-1])) +
     theme_minimal()
   
   return(p)
 }
 
 
-all_vars <- paste0("V", 2:12)
+all_vars <- paste0("V", c(2:7,10:12))
 plots <- lapply(all_vars, function(v) plot_func(txt_f, v))
 
-grid.arrange(grobs = plots, ncol = 3)
+grid.arrange(grobs = plots, ncol = 2)
 #
 
 
