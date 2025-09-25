@@ -32,7 +32,7 @@ plot_func <- function(df, column, bw_adj = 1) {
   plot_df$outlier[outliers] <- TRUE
   
   p <- ggplot(plot_df, aes(x = value)) +
-    geom_density(fill = "lightblue", alpha = 0.5, adjust = bw_adj) +
+    geom_density(fill = "lightblue", alpha = 0.5, bw = bw_adj) +
     geom_point(
       data = subset(plot_df, outlier),
       aes(x = value, y = 0),

@@ -1,0 +1,545 @@
+---
+title: "lab2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(plotly)
+library(readxl)
+library(MASS)
+library(tidyr)
+
+```
+
+# Assignment 1
+
+## Step 1
+
+```{r echo=TRUE}
+data <- read.csv("olive.csv")
+ggplot(data,mapping = aes(x=oleic, y=palmitic, color = linoleic)) +
+  geom_point() +
+  scale_color_gradient(  low = "#56B1F7",
+                         high = "#132B43") +
+  labs(title = "Palmitic vs Oleic colored by continuous Linoleic",
+       x = "Oleic",
+       y = "Palmitic") +
+    theme_minimal() 
+
+               
+p_color <- ggplot(data,mapping = aes(x=oleic, y=palmitic, color = cut_interval(linoleic,4))) +
+  geom_point() +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = "Palmitic vs Oleic colored by continuous Linoleic",
+       x = "Oleic",
+       y = "Palmitic") +
+  theme_minimal()
+
+p_color
+```
+
+When we only use a single color dimension to express numerical values, 
+the human eye cannot quickly and accurately perceive the numerical differences. 
+However, dividing the numerical values into several discrete color categories becomes a feature of "color classification", 
+which is easier to be quickly distinguished by pre-attention processing.
+
+## Step 2
+
+```{r echo=TRUE}
+p_size <- ggplot(data, aes(x = oleic, y = palmitic, size = cut_interval(linoleic,4))) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Palmitic vs Oleic (Linoleic (Size)") +
+  theme_minimal()
+
+
+angles <- c(0, pi/4, pi/2, 3*pi/4)
+data <- data %>%
+  mutate(Linoleic_angle = as.numeric(cut_interval(linoleic,4)),
+         angle = angles[Linoleic_angle])
+
+p_angle <- ggplot(data, aes(x = oleic, y = palmitic)) +
+  geom_spoke(aes(angle = angle, radius = 25), 
+             ) +
+  labs(title = "Palmitic vs Oleic (Linoleic (Orientation)") +
+  theme_minimal()
+
+grid.arrange(grobs = list(p_color,p_size,p_angle), ncol = 2)
+```
+
+## Step 3
+
+```{r echo=TRUE}
+ggplot(data,mapping = aes(x=eicosenoic, y=oleic, color = Region)) +
+  geom_point() +
+  scale_color_gradient(  low = "#56B1F7",
+                         high = "#132B43") +
+  labs(title = " Oleic vs Eicosenoic  colored by Region",
+       x = "Eicosenoic",
+       y = "Oleic") +
+  theme_minimal()
+```
+
+Region values have no real distance relationship.
+Using continuous colors will blur the boundaries between categories and produce mixed colors, making it difficult to separate groups at a glance.
+And it will mislead readers to interpret Region as a numerical variable.
+
+```{r echo=TRUE}
+ggplot(data,mapping = aes(x=eicosenoic, y=oleic, color = as.factor(Region))) +
+  geom_point() +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = " Oleic vs Eicosenoic  colored by Region (categorical)",
+       x = "Eicosenoic",
+       y = "Oleic") +
+  theme_minimal()
+```
+
+Discrete color coding relies primarily on preattentive mechanisms, so I can quickly discern boundaries.
+
+## Step 4
+
+```{r echo=TRUE}
+ggplot(data, aes(x=eicosenoic, y=oleic)) +
+  geom_point(aes(color =cut_interval(linoleic,3), shape = cut_interval(palmitic,3), size = cut_interval(palmitoleic,3)),
+             alpha = 0.8, stroke = 0.3) +
+  scale_color_brewer(palette = "Set1") +             
+  scale_shape_manual(values = c(16, 17, 15)) +        
+  scale_size_manual(values = c(2.2, 3.2, 4.2)) +      
+  labs(title = "Oleic vs Eicosenoic with 3×3×3 encodings",
+       color = "Linoleic (3)", shape = "Palmitic (3)", size = "Palmitoleic (3)",
+       x = "eicosenoic", y = "oleic") +
+  theme_minimal()
+```
+
+Extremely difficult. 
+
+When multiple channels are jointly encoded, it is no longer parallel processing of pre-attention, but requires serial comparison of attention.
+Combining metrics does not sum up the capacity. So the working memory load is high, making it difficult to distinguish 27 combinations quickly and stably.
+
+## Step 5
+
+```{r echo=TRUE}
+ggplot(data, aes(x=eicosenoic, y=oleic)) +
+  geom_point(aes(color =as.factor(Region), shape = cut_interval(palmitic,3), size = cut_interval(palmitoleic,3)),
+             alpha = 0.8, stroke = 0.3) +
+  scale_color_brewer(palette = "Set1") +             
+  scale_shape_manual(values = c(16, 17, 15)) +        
+  scale_size_manual(values = c(2.2, 3.2, 4.2)) +      
+  labs(title = "Oleic vs Eicosenoic with 3×3×3 encodings",
+       color = "Region (3)", shape = "Palmitic (3)", size = "Palmitoleic (3)",
+       x = "eicosenoic", y = "oleic") +
+  theme_minimal()
+```
+
+Boundary between two groups of elements with the same visual feature is detected preattentively.
+
+## Step 6
+
+```{r echo=TRUE}
+area_counts <- data %>%
+  count(Area, name = "n") %>%
+  arrange(desc(n)) %>%
+  mutate(pct = n / sum(n))
+
+plot_ly(
+  data = area_counts,
+  labels = ~Area,
+  values = ~n,
+  type = "pie",
+  textinfo = "none",                
+  hovertemplate = paste(
+    "<b>%{label}</b><br>",
+    "Count: %{value}<br>",
+    "Share: %{percent}",
+    "<extra></extra>"
+  )
+ ) %>%
+  layout(title = "Proportions of oils by Area ",
+         showlegend = TRUE)
+```
+
+The pie chart demonstrates the perceptual limits of judging angles/areas and the cost of hover-only labels, which force attentive, serial inspection rather than rapid, preattentive comparison.
+
+## Step 7
+
+```{r echo=TRUE}
+p_scatter <- ggplot(data, aes(x = eicosenoic, y = linoleic)) +
+  geom_point() +
+  labs(title = "Scatter: Linoleic vs Eicosenoic",
+       x = "Eicosenoic", y = "Linoleic") +
+  theme_minimal()
+p_scatter
+
+p_contour <- ggplot(data, aes(x = eicosenoic, y = linoleic)) +
+  stat_density_2d() +     
+  scale_color_viridis_d() +
+  labs(title = "2D-density contour plot : Linoleic vs Eicosenoic",
+       x = "Eicosenoic", y = "Linoleic", color = "ndensity level") +
+  theme_minimal()
+p_contour
+```
+
+
+# Assignment 2
+
+```{r echo=TRUE}
+data <- read_xlsx("baseball-2016.xlsx") 
+```
+
+Yes, MDS is based on distance, but the dimensions of the data variables vary greatly, which will affect the judgment of MDS.
+
+## Step 2
+
+```{r echo=TRUE}
+data.numeric= scale(data[,3:28])
+d=dist(data.numeric)
+
+res=isoMDS(d,k=2)
+coords=res$points
+
+coordsMDS=as.data.frame(coords)
+coordsMDS$name=rownames(coordsMDS)
+coordsMDS$League=data$League
+coordsMDS$Team=data$Team
+
+
+plot_ly(coordsMDS, x=~V1, y=~V2, type="scatter", hovertext=~Team, color= ~League)
+```
+
+There is a slight difference, but not strong.
+
+AL teams are more distributed above the x-axis and to the right of the y-axis.
+
+NL teams are more distributed below the x-axis and to the right of the y-axis.
+
+Therefore, the two leagues are more distinguishable along the y-axis.
+
+Boston Red Sox seems to be an outlier.
+
+## Step 3
+
+```{r echo=TRUE}
+sh <- Shepard(d, coords)
+delta <-as.numeric(d)
+D<- as.numeric(dist(coords))
+
+n=nrow(coords)
+index=matrix(1:n, nrow=n, ncol=n)
+index1=as.numeric(index[lower.tri(index)])
+
+n=nrow(coords)
+index=matrix(1:n, nrow=n, ncol=n, byrow = T)
+index2=as.numeric(index[lower.tri(index)])
+
+
+
+plot_ly()%>%
+  add_markers(x=~delta, y=~D, hoverinfo = 'text',
+              text = ~paste('Obj1: ', rownames(data)[index1],
+                            '<br> Obj 2: ', rownames(data)[index2]))%>%
+  #if nonmetric MDS inolved
+  add_lines(x=~sh$x, y=~sh$yf)
+```
+
+
+relatively successful, as can be seen from the figure, the results fit very well and the points basically fit the curve.
+
+When $\delta$ is between 6 and 8, a few points are below the line, indicating that the distance between these points after mapping is too close.
+
+When $\delta$ is between 8 and 10, a few points are above the line, indicating that the distance between these points after mapping is too far.
+
+When $\delta$ is greater than 10, almost all points are difficult to map for MDS.
+
+## Step 4
+
+```{r echo=TRUE}
+best_dim <- "V2"
+
+num_df <- data[, 3:28]
+num_names <- names(num_df)
+
+
+cors <- sapply(num_names, function(vname) {
+  cor(num_df[[vname]], coordsMDS[[best_dim]], use = "complete.obs", method = "pearson")
+})
+
+cors_sorted <- sort(cors, decreasing = FALSE)
+top2 <- names(sort(abs(cors), decreasing = TRUE))[1:2]
+print(cors[top2])
+
+plot_ly(coordsMDS, x=~V2, y=~num_df[[top2[1]]], type="scatter", hovertext=~Team, color= ~League) %>%
+    layout(
+      xaxis = list(title = best_dim),
+      yaxis = list(title = top2[1])
+    )
+
+plot_ly(coordsMDS, x=~V2, y=~num_df[[top2[2]]], type="scatter", hovertext=~Team, color= ~League)  %>%
+    layout(
+      xaxis = list(title = best_dim),
+      yaxis = list(title = top2[2])
+    )
+
+
+```
+
+HR and HR per game showed the strongest positive correlation.
+
+Home runs are a significant predictor of both scoring and winning percentage, so V2 can be interpreted as a dimension of team offensive intensity, with significant differences across leagues.
+
+
+# Appendix
+
+## Assignmen1
+```{r echo=TRUE, eval=FALSE}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(plotly)
+
+data <- read.csv("olive.csv")
+
+# step1
+
+ggplot(data,mapping = aes(x=oleic, y=palmitic, color = linoleic)) +
+  geom_point() +
+  scale_color_gradient(  low = "#56B1F7",
+                         high = "#132B43") +
+  labs(title = "Palmitic vs Oleic colored by continuous Linoleic",
+       x = "Oleic",
+       y = "Palmitic") +
+    theme_minimal() 
+
+               
+p_color <- ggplot(data,mapping = aes(x=oleic, y=palmitic, color = cut_interval(linoleic,4))) +
+  geom_point() +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = "Palmitic vs Oleic colored by continuous Linoleic",
+       x = "Oleic",
+       y = "Palmitic") +
+  theme_minimal()
+
+p_color
+#When we only use a single color dimension to express numerical values, 
+#the human eye cannot quickly and accurately perceive the numerical differences. 
+#However, dividing the numerical values into several discrete color categories becomes a feature of "color classification", 
+#which is easier to be quickly distinguished by pre-attention processing.
+
+# step2
+
+# color class is as previous plot.
+
+p_size <- ggplot(data, aes(x = oleic, y = palmitic, size = cut_interval(linoleic,4))) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Palmitic vs Oleic (Linoleic (Size)") +
+  theme_minimal()
+
+
+angles <- c(0, pi/4, pi/2, 3*pi/4)
+data <- data %>%
+  mutate(Linoleic_angle = as.numeric(cut_interval(linoleic,4)),
+         angle = angles[Linoleic_angle])
+
+p_angle <- ggplot(data, aes(x = oleic, y = palmitic)) +
+  geom_spoke(aes(angle = angle, radius = 25), 
+             ) +
+  labs(title = "Palmitic vs Oleic (Linoleic (Orientation)") +
+  theme_minimal()
+
+grid.arrange(grobs = list(p_color,p_size,p_angle), ncol = 2)
+#
+
+# step3
+ggplot(data,mapping = aes(x=eicosenoic, y=oleic, color = Region)) +
+  geom_point() +
+  scale_color_gradient(  low = "#56B1F7",
+                         high = "#132B43") +
+  labs(title = " Oleic vs Eicosenoic  colored by Region",
+       x = "Eicosenoic",
+       y = "Oleic") +
+  theme_minimal()
+#Region values have no real distance relationship.
+#Using continuous colors will blur the boundaries between categories and produce mixed colors, making it difficult to separate groups at a glance.
+#And it will mislead readers to interpret Region as a numerical variable.
+
+ggplot(data,mapping = aes(x=eicosenoic, y=oleic, color = as.factor(Region))) +
+  geom_point() +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = " Oleic vs Eicosenoic  colored by Region (categorical)",
+       x = "Eicosenoic",
+       y = "Oleic") +
+  theme_minimal()
+#Discrete color coding relies primarily on preattentive mechanisms, so I can quickly discern boundaries.
+
+# step4
+ggplot(data, aes(x=eicosenoic, y=oleic)) +
+  geom_point(aes(color =cut_interval(linoleic,3), shape = cut_interval(palmitic,3), size = cut_interval(palmitoleic,3)),
+             alpha = 0.8, stroke = 0.3) +
+  scale_color_brewer(palette = "Set1") +             
+  scale_shape_manual(values = c(16, 17, 15)) +        
+  scale_size_manual(values = c(2.2, 3.2, 4.2)) +      
+  labs(title = "Oleic vs Eicosenoic with 3×3×3 encodings",
+       color = "Linoleic (3)", shape = "Palmitic (3)", size = "Palmitoleic (3)",
+       x = "eicosenoic", y = "oleic") +
+  theme_minimal()
+# Extremely difficult. 
+# When multiple channels are jointly encoded, it is no longer parallel processing of pre-attention, but requires serial comparison of attention.
+# Combining metrics does not sum up the capacity. So the working memory load is high, making it difficult to distinguish 27 combinations quickly and stably.
+
+# step5
+ggplot(data, aes(x=eicosenoic, y=oleic)) +
+  geom_point(aes(color =as.factor(Region), shape = cut_interval(palmitic,3), size = cut_interval(palmitoleic,3)),
+             alpha = 0.8, stroke = 0.3) +
+  scale_color_brewer(palette = "Set1") +             
+  scale_shape_manual(values = c(16, 17, 15)) +        
+  scale_size_manual(values = c(2.2, 3.2, 4.2)) +      
+  labs(title = "Oleic vs Eicosenoic with 3×3×3 encodings",
+       color = "Region (3)", shape = "Palmitic (3)", size = "Palmitoleic (3)",
+       x = "eicosenoic", y = "oleic") +
+  theme_minimal()
+# Boundary between two groups of elements with the same visual feature is detected preattentively.
+
+# step6
+area_counts <- data %>%
+  count(Area, name = "n") %>%
+  arrange(desc(n)) %>%
+  mutate(pct = n / sum(n))
+
+plot_ly(
+  data = area_counts,
+  labels = ~Area,
+  values = ~n,
+  type = "pie",
+  textinfo = "none",                
+  hovertemplate = paste(
+    "<b>%{label}</b><br>",
+    "Count: %{value}<br>",
+    "Share: %{percent}",
+    "<extra></extra>"
+  )
+ ) %>%
+  layout(title = "Proportions of oils by Area ",
+         showlegend = TRUE)
+
+#The pie chart demonstrates the perceptual limits of judging angles/areas and the cost of hover-only labels, which force attentive, serial inspection rather than rapid, preattentive comparison.
+
+p_scatter <- ggplot(data, aes(x = eicosenoic, y = linoleic)) +
+  geom_point() +
+  labs(title = "Scatter: Linoleic vs Eicosenoic",
+       x = "Eicosenoic", y = "Linoleic") +
+  theme_minimal()
+p_scatter
+
+p_contour <- ggplot(data, aes(x = eicosenoic, y = linoleic)) +
+  stat_density_2d() +     
+  scale_color_viridis_d() +
+  labs(title = "2D-density contour plot : Linoleic vs Eicosenoic",
+       x = "Eicosenoic", y = "Linoleic", color = "ndensity level") +
+  theme_minimal()
+p_contour
+
+#
+
+
+
+
+```
+
+## Assignmen 2
+
+```{r echo=TRUE, eval=FALSE}
+library(readxl)
+library(plotly)
+library(MASS)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
+
+data <- read_xlsx("baseball-2016.xlsx")  
+#MDS is based on distance, but the dimensions of the data variables vary greatly, which will affect the judgment of MDS.
+
+#step2
+
+data.numeric= scale(data[,3:28])
+d=dist(data.numeric)
+
+res=isoMDS(d,k=2)
+coords=res$points
+
+coordsMDS=as.data.frame(coords)
+coordsMDS$name=rownames(coordsMDS)
+coordsMDS$League=data$League
+coordsMDS$Team=data$Team
+
+
+plot_ly(coordsMDS, x=~V1, y=~V2, type="scatter", hovertext=~Team, color= ~League)
+
+#There is a slight difference, but not strong. 
+#AL teams are more distributed above the x-axis and to the right of the y-axis.
+#NL teams are more distributed below the x-axis and to the right of the y-axis.
+#Therefore, the two leagues are more distinguishable along the y-axis.
+# Boston Red Sox seems to be an outlier.
+
+#step3
+
+
+sh <- Shepard(d, coords)
+delta <-as.numeric(d)
+D<- as.numeric(dist(coords))
+
+n=nrow(coords)
+index=matrix(1:n, nrow=n, ncol=n)
+index1=as.numeric(index[lower.tri(index)])
+
+n=nrow(coords)
+index=matrix(1:n, nrow=n, ncol=n, byrow = T)
+index2=as.numeric(index[lower.tri(index)])
+
+
+
+plot_ly()%>%
+  add_markers(x=~delta, y=~D, hoverinfo = 'text',
+              text = ~paste('Obj1: ', rownames(data)[index1],
+                            '<br> Obj 2: ', rownames(data)[index2]))%>%
+  #if nonmetric MDS inolved
+  add_lines(x=~sh$x, y=~sh$yf)
+
+# relatively successful, as can be seen from the figure, the results fit very well and the points basically fit the curve.
+# When $delta$ is between 6 and 8, a few points are below the line, indicating that the distance between these points after mapping is too close.
+# When $delta$ is between 8 and 10, a few points are above the line, indicating that the distance between these points after mapping is too far.
+# When $delta$ is greater than 10, almost all points are difficult to map for MDS.
+
+#step4
+best_dim <- "V2"
+
+num_df <- data[, 3:28]
+num_names <- names(num_df)
+
+
+cors <- sapply(num_names, function(vname) {
+  cor(num_df[[vname]], coordsMDS[[best_dim]], use = "complete.obs", method = "pearson")
+})
+
+cors_sorted <- sort(cors, decreasing = FALSE)
+top2 <- names(sort(abs(cors), decreasing = TRUE))[1:2]
+print(cors[top2])
+
+plot_ly(coordsMDS, x=~V2, y=~num_df[[top2[1]]], type="scatter", hovertext=~Team, color= ~League) %>%
+  layout(
+    xaxis = list(title = best_dim),
+    yaxis = list(title = top2[1])
+  )
+
+plot_ly(coordsMDS, x=~V2, y=~num_df[[top2[2]]], type="scatter", hovertext=~Team, color= ~League)  %>%
+  layout(
+    xaxis = list(title = best_dim),
+    yaxis = list(title = top2[2])
+  )
+#HR and HR per game showed the strongest positive correlation.
+#Home runs are a significant predictor of both scoring and winning percentage, so V2 can be interpreted as a dimension of team offensive intensity, with significant differences across leagues.
+
+```
+
