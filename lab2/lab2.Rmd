@@ -43,10 +43,11 @@ p_color <- ggplot(data,mapping = aes(x=oleic, y=palmitic, color = cut_interval(l
 p_color
 ```
 
-When we only use a single color dimension to express numerical values, 
-the human eye cannot quickly and accurately perceive the numerical differences. 
-However, dividing the numerical values into several discrete color categories becomes a feature of "color classification", 
-which is easier to be quickly distinguished by pre-attention processing.
+When we only use a single color dimension to express numerical values, it captures subtle variations in `Linoleic`. However,human eyes cannot quickly and accurately perceive the numerical differences. 
+When dividing the numerical values into several discrete color, categories becomes a feature of "color classification", 
+which is easier to be quickly distinguished by pre-attention processing.But it sacrifices detail of  underlying trends.  
+
+`Perception problem` is demonstrated by this experiment. People perceive differences between distinct colors more accurately than differences in color intensity, because distinguishing different colors is a preattentive visual task, meaning it can be processed quickly and in parallel by the visual system. In contrast, variations in color intensity are more subtle and can easily be misinterpreted.  
 
 ## Step 2
 
@@ -70,6 +71,10 @@ p_angle <- ggplot(data, aes(x = oleic, y = palmitic)) +
 
 grid.arrange(grobs = list(p_color,p_size,p_angle), ncol = 2)
 ```
+
+When mapping the discretized Linoleic to **size**, the difference between categories can be difficult to perceived. Some of the  points are too large and they tend to overlap, making it difficult to distinguish certain categories.In comparison, mapping to **orientation** allows categories to be distinguished more easily, although the precision of decoding is still limited because humans are not as sensitive to small angle differences. Mapping to **color** provides the easiest distinction between categories, as humans can perceive colors more accurately.  
+
+In terms of perception metrics, **color** can decode the largest amount of information (highest number of bits), followed by size and orientation, reflecting their relative effectiveness in conveying categorical differences.
 
 ## Step 3
 
@@ -98,7 +103,7 @@ ggplot(data,mapping = aes(x=eicosenoic, y=oleic, color = as.factor(Region))) +
   theme_minimal()
 ```
 
-Discrete color coding relies primarily on preattentive mechanisms, so I can quickly discern boundaries.
+Discrete color coding relies primarily on preattentive mechanisms, which can be rapidly and parallelly processed by the brain, allowing me to quickly discern and immediately perceive the boundaries between different categories.
 
 ## Step 4
 
@@ -135,7 +140,7 @@ ggplot(data, aes(x=eicosenoic, y=oleic)) +
   theme_minimal()
 ```
 
-Boundary between two groups of elements with the same visual feature is detected preattentively.
+The boundary between two groups of elements with the same visual feature is detected preattentively.Even though the plot uses multiple aesthetics mapping, we can still capture the boundaries information between regions since color is a strong preattentive feature. This enables the decision boundaries between regions to be readily distinguished without requiring focused attention, as Treisman’s theory suggests.
 
 ## Step 6
 
@@ -183,6 +188,7 @@ p_contour <- ggplot(data, aes(x = eicosenoic, y = linoleic)) +
 p_contour
 ```
 
+Compared to scatterplot, conter plot abstracts the data into density levels, which may be misleading because the counter lines may suggest the presence of distinct cluster or groups even if the data is not categorical.  
 
 # Assignment 2
 
@@ -246,13 +252,16 @@ plot_ly()%>%
 ```
 
 
-relatively successful, as can be seen from the figure, the results fit very well and the points basically fit the curve.
+Relatively successful, as can be seen from the figure, the results fit very well and the points basically fit the curve.
 
 When $\delta$ is between 6 and 8, a few points are below the line, indicating that the distance between these points after mapping is too close.
 
 When $\delta$ is between 8 and 10, a few points are above the line, indicating that the distance between these points after mapping is too far.
 
-When $\delta$ is greater than 10, almost all points are difficult to map for MDS.
+When $\delta$ is greater than 10, almost all points are difficult to map for MDS.  
+
+`Minnesota Twins` and `Aizona Diamondbacks` were hard to map successfully.
+
 
 ## Step 4
 
