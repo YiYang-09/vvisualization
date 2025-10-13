@@ -1,0 +1,467 @@
+---
+title: "lab3"
+output:
+  html_document: default
+  pdf_document: default
+  bibliography: refs.bib
+knitr:
+  opts_chunk:
+    warning: false
+    message: false
+---
+
+```{r setup, include=FALSE,warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(plotly)
+library(seriation)
+library(scales)
+library(dplyr)
+```
+
+# Assignment 1
+
+## step2
+
+```{r echo=TRUE}
+
+row_data <- read.table("prices-and-earnings.txt",header =TRUE,sep="\t",stringsAsFactors=FALSE)
+data <- row_data[,c(1,2,5,6,7,9,10,16,17,18,19)]
+rownames(data) <- data[,1]
+#data <- as.data.frame(data[,-1])
+data <- data[,-1]
+
+# step2
+
+datacaled=scale(data)
+
+plot_ly(x=colnames(datacaled), y=rownames(datacaled), 
+        z=as.matrix(datacaled), type="heatmap", colors =colorRamp(c("yellow", "red")))
+```
+
+
+It is not possible to see clusters or outliers because it can not show the cluster features clearly.
+
+## step3
+
+```{r}
+rowdist<-dist(datacaled)
+coldist<-dist(t(datacaled))
+
+order1<-seriate(rowdist, "HC")
+order2<-seriate(coldist, "HC")
+ord1<-get_order(order1)
+ord2<-get_order(order2)
+
+reord<-datacaled[rev(ord1),ord2]
+     
+plot_ly(x=colnames(reord), y=rownames(reord), 
+        z=reord, type="heatmap", colors =colorRamp(c("yellow", "red")),
+        )%>%layout(title="Euclidean distance")
+```
+
+```{r}
+R_rows <- cor(t(datacaled), use = "pairwise.complete.obs")
+D_r  <- as.dist(1 - R_rows)
+
+R_cols <- cor(datacaled, use = "pairwise.complete.obs")
+D_c  <- as.dist(1 - R_cols)
+
+ord_r <- seriate(D_r, method = "HC")
+o1 <- get_order(ord_r)
+
+ord_c <- seriate(D_c, method = "HC")
+o2 <- get_order(ord_c)
+reord_r <- datacaled[rev(o1), o2]  
+
+plot_ly(x = colnames(reord_r), y = rownames(reord_r), z = reord_r,
+        type = "heatmap", colors = colorRamp(c("yellow","red")))%>%
+  layout(title = "One minus correlation")
+```
+Using Euclidian distance seems easier to analyze and cluster cities bases on economic indicators.
+
+*reason*: **Euclidian distance** measures the absolute difference between cities.It treats each city as a point in multidimensional space and calculate the straight-line distance between. So it culd help show the absolute difference between different cities.
+Cities with similiar values across all variables will have smaller distances.
+
+**One Minus Correlation**: measure the similarity of variable values across cities, other than the absolute value.Cities with similar trends(e.g.,both high in wages and food costs) will have high correlation and thus small distance- even if their actual values differ significantly. 
+
+*Analysis of Euclidian distance heatmap*
+Based on the heatmap, the cities can be grouped into three clusters. The first cluster consists of high-cost cities such as Zurich, Amsterdam, and Milan, which appear in the upper part of the map and show high values across variables such as food costs, clothing index, net wages, and prices of goods and services.
+
+The second cluster consists of mid-range cities such as Sofia,Warsao and Rome.These cities show relatively average values across all variables. For instance, the average values of iPhone.4s.hr. and Hours.Worked for Group 2 are generally higher than those in Group 1 but lower than those in Group 3. This suggests that residents in these cities face moderate economic pressure—neither enjoying the affordability of Group 1 nor bearing the burden seen in Group 3.
+
+The third group includes lower-cost cities such as Cairo,Nairobi.These cities appear in the middle section of the heatmap.These cities exhibit the highest values in variables such as iPhone 4.s.hr., Hours.Worked, and Big.Mac.min, indicating that residents need to work significantly more hours to afford basic living expenses or purchase high-cost items.Meanwhile the living cost is relatively low.
+
+
+## step 4
+```{r}
+order1_tsp<-seriate(rowdist, "TSP")
+order2_tsp<-seriate(coldist, "TSP")
+ord1_tsp<-get_order(order1_tsp)
+ord2_tsp<-get_order(order2_tsp)
+
+reord_tsp<-datacaled[rev(ord1_tsp),ord2_tsp]
+
+plot_ly(x=colnames(reord_tsp), y=rownames(reord_tsp), 
+        z=reord_tsp, type="heatmap", colors =colorRamp(c("yellow", "red")))
+```
+
+Visually, the TSP method is better, and the clusters shown in the heatmap are more compact and have clearer boundaries.
+
+```{r}
+hpl_hc  <- criterion(rowdist,order1, method  = "Path_length")
+hpl_tsp <- criterion(rowdist,order1_tsp, method = "Path_length")
+
+grd_hc  <- criterion(rowdist,order1, method  = "Gradient_raw")
+grd_tsp <- criterion(rowdist,order1_tsp, method = "Gradient_raw")
+
+
+```
+
+```{r echo=FALSE}
+cat("HPL_HC: ", hpl_hc,"\n")
+cat("HPL_TSP: ", hpl_tsp,"\n")
+cat("GRD_HC: ", grd_hc,"\n")
+cat("GRD_TSP: ", grd_tsp,"\n")
+```
+
+
+For both HPL and gradien value, using TSP is much lower.
+
+## step 5
+
+```{r echo=TRUE,warning=FALSE, message=FALSE}
+Ps=list()
+nPlot=nrow(data)
+
+data %>%
+  add_rownames( var = "group" ) %>%
+  mutate_each(funs(rescale), -group) -> data_radar
+
+for (i in 1:nPlot){
+  Ps[[i]] <- htmltools::tags$div(
+    plot_ly(type = 'scatterpolar', 
+            r=as.numeric(data_radar[i,-1]),
+            theta= colnames(data_radar)[-1], 
+            fill="toself")%>%
+      layout(title=data_radar$group[i]), style="width: 25%;")
+}
+
+h <-htmltools::tags$div(style = "display: flex; flex-wrap: wrap", Ps)
+
+htmltools::browsable(h)
+```
+
+*cluster1*: Oslo,Copenhagen,Luxembourg,Lyon... This cluster exhibits a distinctive radar shape characterized by high values in goods and services prices, food costs, vacation days, net wages, and the clothing index, alongside low values in bread price per kilogram (in minutes worked), Big Mac price (in minutes), iPhone 4S price (in hours), and total hours worked.
+
+Such a profile suggests a socio-economic context marked by higher wages, fewer working hours, and elevated living expenses—traits typically associated with developed economies.
+
+*cluster2*:Cairo,Bangkok,Mexico City,Delhi.This cluster displays a radar profile marked by high values in hours worked, rice price per kilogram (in minutes worked), Big Mac price (in minutes), and iPhone 4S price (in hours), along with a low value in vacation days.
+
+Such a pattern reflects a socio-economic environment characterized by lower wage efficiency, longer working hours, and limited leisure time—features commonly associated with less economically developed or labor-intensive economies.
+
+*outlier*: Ljublajana, The city of Ljubljana stands out as a distinct outlier. Despite exhibiting low net wages and few hours worked, it maintains a moderate number of vacation days. Notably, it also shows one of the highest values for rice price per kilogram (measured in minutes worked), indicating a disproportionately high cost of basic food relative to income.
+
+
+## step 6
+
+The choice between heatmaps and radar charts depends on the specific analytical objective. If the goal is to quickly identify and distinguish clusters, heatmaps are more effective due to their intuitive visual encoding—color intensity allows for immediate recognition of patterns and groupings across variables.
+
+However, when the focus shifts to a more detailed analysis of outliers or to exploring the variable-level differences within and between clusters, radar charts offer greater clarity. They allow for observation-specific comparisons, making it easier to detect subtle deviations and unique profiles that may be obscured in aggregated heatmap views.
+
+
+# Assignment 2
+
+```{r echo=FALSE,warning=FALSE, message=FALSE}
+library(ggraph)
+library(igraph)
+library(visNetwork)
+library(dplyr)
+```
+
+```{r echo=TRUE,warning=FALSE, message=FALSE}
+#step 1: 
+links <- read.table("trainData.dat",header = FALSE,fileEncoding =  "latin1")
+nodes <- read.table("trainMeta.dat",header = FALSE,fileEncoding =  "latin1")
+
+nodes[,3] <- 1:nrow(nodes) 
+nodes <- nodes[,c(3,1,2)]
+
+colnames(nodes) <- c("id","name","bombingGroup")
+colnames(links) <- c("from","to","weight")
+
+#Collapsing multiple links into one
+links <- aggregate(weight ~ from + to, data = links, FUN = sum) 
+links <- links[order(links$from,links$to),]
+
+rownames(links) <- NULL
+#label the nodes
+nodes$label <- nodes$name
+
+## nodes colored by Bombing Group
+nodes$group=nodes$bombingGroup
+
+## size of node by number of connections ---igraph-strength
+#1 create igraph object
+net <- graph_from_data_frame(d=links,vertices = nodes,directed = T)
+#2 use strength()
+nodes$value <- strength(net,mode = "out",weight=E(net)$weight)
+
+links$width=links$weight #
+
+
+visNetwork(nodes, links)%>%visPhysics(solver="repulsion")%>%#optimize repulsion force
+  visOptions(highlightNearest = TRUE) 
+```
+*Analysis*: Based on the repulsion-based layout algorithm, nodes with stronger connections are automatically positioned closer together. In the network visualization, the large blue nodes in the central region are densely interconnected and surrounded by smaller nodes, forming a clearly identifiable cluster.
+
+The yellow nodes are more dispersed compared to the blue ones, but still form several peripheral clusters. For example, in the lower right corner, there is a cluster centered around large yellow nodes such as Imad Eddin Barakat. In the lower left, another cluster is formed around Abdelkarim el Mejjati. In the upper right, Semaan Gaby Eid and the surrounding nodes constitute yet another cluster.
+
+Through manual inspection of the network layout, we can roughly identify four distinct clusters
+
+## step 2
+
+```{r echo=TRUE}
+
+visNetwork(nodes, links)%>%visPhysics(solver="repulsion")%>%#optimize repulsion force
+  visOptions(highlightNearest =  list(enabled = TRUE, degree = 2, hover = TRUE),nodesIdSelection = TRUE) 
+```
+
+Jamal Zougam had the best opportunity to spread information within the network, as indicated by his high node strength and central position in the graph. According to Wikipedia, Zougam (born 5 October 1973) was one of the individuals convicted for the 2004 Madrid train bombings. He was arrested on 13 March 2004 and charged with multiple counts of murder, attempted murder, vehicle theft, membership in a terrorist organization, and four counts of carrying out terrorist acts.
+
+## step 3
+
+```{r echo=TRUE}
+##community identification
+nodes1<-nodes
+#net2 <- graph_from_data_frame(d=links, vertices=nodes, directed=F)
+ceb <- cluster_edge_betweenness(net) 
+nodes1$group=ceb$membership
+#visNetwork(nodes1,links)%>%visIgraphLayout()%>%visPhysics(solver = "repulsion")
+visNetwork(nodes1,links)%>%visLegend()%>%visOptions(
+  highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE),
+  nodesIdSelection = TRUE
+) %>%visPhysics(solver = "repulsion")
+```
+By optimizing edge betweenness, we can still observe the four main clusters identified in the initial step. However, in addition to those, the cluster originally surrounding `Semaan Gaby Eid` in the network has been further subdivided into two distinct communities. Overall, we can identify five major clusters, along with several smaller ones of more limited size.
+
+
+## step 4
+
+```{r echo=TRUE}
+#step 4 : 
+netm <- get.adjacency(net, attr="weight", sparse=F)
+
+rowdist<-dist(netm)
+
+library(seriation)
+order1<-seriate(rowdist, "HC")
+ord1<-get_order(order1)
+
+reordmatr<-netm[ord1,ord1]
+
+library(plotly)
+
+plot_ly(z=~reordmatr, x=~colnames(reordmatr), 
+        y=~rownames(reordmatr), type="heatmap")
+```
+
+The heatmap reveals a pronounced cluster in the upper-right quadrant, characterized by high interaction values among individuals such as `Jamal Zougam`. This cluster corresponds closely to the community identified in Step 1 through visual inspection and in Step 3 via edge betweenness clustering.
+
+
+Contribution:  
+Yanjie Lyu(yanly639) & Yi Yang(yiyan338): Both team members independently completed all parts of the project. Throughout the process, we discussed our findings and analysis with each other, reaching a consensus on the final conclusions.
+
+# Appendix 
+## Assignment1
+```{r eval=FALSE}
+library(plotly)
+library(seriation)
+library(scales)
+library(dplyr)
+
+row_data <- read.table("prices-and-earnings.txt",header =TRUE,sep="\t",stringsAsFactors=FALSE)
+data <- row_data[,c(1,2,5,6,7,9,10,16,17,18,19)]
+rownames(data) <- data[,1]
+#data <- as.data.frame(data[,-1])
+data <- data[,-1]
+
+# step2
+
+datacaled=scale(data)
+
+plot_ly(x=colnames(datacaled), y=rownames(datacaled), 
+        z=as.matrix(datacaled), type="heatmap", colors =colorRamp(c("yellow", "red")))
+# It is extremely hard to see any clusters or outliers.
+
+# step3 (euclidean)
+rowdist<-dist(datacaled)
+coldist<-dist(t(datacaled))
+
+order1<-seriate(rowdist, "HC")
+order2<-seriate(coldist, "HC")
+ord1<-get_order(order1)
+ord2<-get_order(order2)
+
+reord<-datacaled[rev(ord1),ord2]
+     
+plot_ly(x=colnames(reord), y=rownames(reord), 
+        z=reord, type="heatmap", colors =colorRamp(c("yellow", "red")))
+
+# step3 (cor)
+R_rows <- cor(t(datacaled), use = "pairwise.complete.obs")
+D_r  <- as.dist(1 - R_rows)
+
+R_cols <- cor(datacaled, use = "pairwise.complete.obs")
+D_c  <- as.dist(1 - R_cols)
+
+ord_r <- seriate(D_r, method = "HC")
+o1 <- get_order(ord_r)
+
+ord_c <- seriate(D_c, method = "HC")
+o2 <- get_order(ord_c)
+reord_r <- datacaled[rev(o1), o2]  
+
+plot_ly(x = colnames(reord_r), y = rownames(reord_r), z = reord_r,
+        type = "heatmap", colors = colorRamp(c("yellow","red")))
+
+
+# step 4
+# TSP heatmap
+order1_tsp<-seriate(rowdist, "TSP")
+order2_tsp<-seriate(coldist, "TSP")
+ord1_tsp<-get_order(order1_tsp)
+ord2_tsp<-get_order(order2_tsp)
+
+reord_tsp<-datacaled[rev(ord1_tsp),ord2_tsp]
+
+plot_ly(x=colnames(reord_tsp), y=rownames(reord_tsp), 
+        z=reord_tsp, type="heatmap", colors =colorRamp(c("yellow", "red")))
+
+
+# objective function values
+hpl_hc  <- criterion(rowdist,order1, method  = "Path_length")
+hpl_tsp <- criterion(rowdist,order1_tsp, method = "Path_length")
+
+grd_hc  <- criterion(rowdist,order1, method  = "Gradient_raw")
+grd_tsp <- criterion(rowdist,order1_tsp, method = "Gradient_raw")
+
+
+
+# step5
+Ps=list()
+nPlot=nrow(data)
+
+data %>%
+  add_rownames( var = "group" ) %>%
+  mutate_each(funs(rescale), -group) -> data_radar
+
+for (i in 1:nPlot){
+  Ps[[i]] <- htmltools::tags$div(
+    plot_ly(type = 'scatterpolar', 
+            r=as.numeric(data_radar[i,-1]),
+            theta= colnames(data_radar)[-1], 
+            fill="toself")%>%
+      layout(title=data_radar$group[i]), style="width: 25%;")
+}
+
+h <-htmltools::tags$div(style = "display: flex; flex-wrap: wrap", Ps)
+
+htmltools::browsable(h)
+
+
+
+
+```
+
+## Assignment 2
+```{r eval=FALSE}
+library("visNetwork")
+library("igraph")
+library("ggraph")
+
+#step 1: 
+links <- read.table("trainData.dat",header = FALSE,fileEncoding =  "latin1")
+nodes <- read.table("trainMeta.dat",header = FALSE,fileEncoding =  "latin1")
+
+nodes[,3] <- 1:nrow(nodes) 
+nodes <- nodes[,c(3,1,2)]
+
+colnames(nodes) <- c("id","name","bombingGroup")
+colnames(links) <- c("from","to","weight")
+
+#Collapsing multiple links into one
+links <- aggregate(weight ~ from + to, data = links, FUN = sum) 
+links <- links[order(links$from,links$to),]
+
+rownames(links) <- NULL
+#label the nodes
+nodes$label <- nodes$name
+
+## nodes colored by Bombing Group
+nodes$group=nodes$bombingGroup
+
+## size of node by number of connections ---igraph-strength
+#1 create igraph object
+net <- graph_from_data_frame(d=links,vertices = nodes,directed = F)
+#2 use strength()
+nodes$value <- strength(net,mode = "all",weight=E(net)$weight)
+
+links$width=links$weight #
+
+
+visNetwork(nodes, links)%>%visPhysics(solver="repulsion")%>%#optimize repulsion force
+  visOptions(highlightNearest = TRUE) 
+
+#analysis: Based on the repulsion-based layout algorithm, nodes with stronger connections are automatically positioned closer together. In the network visualization, the large blue nodes in the central region are densely interconnected and surrounded by smaller nodes, forming a clearly identifiable cluster.
+
+#The yellow nodes are more dispersed compared to the blue ones, but still form several peripheral clusters. For example, in the lower right corner, there is a cluster centered around large yellow nodes such as `Imad Eddin Barakat`. In the lower left, another cluster is formed around `Abdelkarim el Mejjati`. In the upper right, `Semaan Gaby Eid` and the surrounding nodes constitute yet another cluster.
+
+#Through manual inspection of the network layout, we can roughly identify four distinct clusters
+
+#step 2:
+visNetwork(nodes, links)%>%visPhysics(solver="repulsion")%>%#optimize repulsion force
+  visOptions(highlightNearest =  list(enabled = TRUE, degree = 2, hover = TRUE),nodesIdSelection = TRUE) 
+#analysis:
+#Jamal Zougam had the best opportunity to spread information within the network, as indicated by his high node strength and central position in the graph. According to Wikipedia, Zougam (born 5 October 1973) was one of the individuals convicted for the 2004 Madrid train bombings. He was arrested on 13 March 2004 and charged with multiple counts of murder, attempted murder, vehicle theft, membership in a terrorist organization, and four counts of carrying out terrorist acts (Wikipedia – 2004 Madrid train bombings)
+
+#step 3:
+##community identification
+nodes1<-nodes
+net <- graph_from_data_frame(d=links, vertices=nodes, directed=F)
+ceb <- cluster_edge_betweenness(net) 
+nodes1$group=ceb$membership
+visNetwork(nodes1,links)%>%visIgraphLayout()
+
+table(ceb$membership)
+# By optimizing edge betweenness, we can still observe the four main clusters identified in the initial step. However, in addition to those, the cluster originally surrounding `Semaan Gaby Eid` in the upper part of the network has been further subdivided into two distinct communities. Overall, we can identify five major clusters, along with several smaller ones of more limited size.
+
+
+#step 4 : 
+netm <- get.adjacency(net, attr="weight", sparse=F)
+
+rowdist<-dist(netm)
+
+library(seriation)
+order1<-seriate(rowdist, "HC")
+ord1<-get_order(order1)
+
+reordmatr<-netm[ord1,ord1]
+
+library(plotly)
+
+plot_ly(z=~reordmatr, x=~colnames(reordmatr), 
+        y=~rownames(reordmatr), type="heatmap")
+
+#The heatmap reveals a pronounced cluster in the upper-right quadrant, characterized by high interaction values among individuals such as `Jamal Zougam`. This cluster corresponds closely to the community identified in Step 1 through visual inspection and in Step 3 via edge betweenness clustering.
+
+
+
+```
+
+
+
+
+
